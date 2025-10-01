@@ -21,6 +21,10 @@ def load_config() -> dict:
 def read_excel(file_path: str) -> pd.DataFrame:
     try:
         df = pd.read_excel(file_path, header=0)
+        if len(df.columns) > 2:
+            df.iloc[:, 2] = df.iloc[:, 2].astype('object')
+        if len(df.columns) > 4:
+            df.iloc[:, 4] = df.iloc[:, 4].astype('object')
         df.iloc[:, 2] = df.iloc[:, 2].fillna('')
         df.iloc[:, 4] = df.iloc[:, 4].fillna('')
         return df
@@ -30,7 +34,7 @@ def read_excel(file_path: str) -> pd.DataFrame:
 
 def write_excel(df: pd.DataFrame, file_path: str):
     try:
-        with pd.ExcelWriter(file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+        with pd.ExcelWriter(file_path, engine='openpyxl', mode='w') as writer:
             df.to_excel(writer, sheet_name='Sheet1', index=False)
         print(f"Excel file updated: {file_path}")
     except Exception as e:
@@ -47,7 +51,7 @@ def add_contact(config: dict, name: str, dialog_id: str, chat_number: str) -> Op
         "phone_id": config['phone_id'],
         "name": name,
         "chat_number": chat_number,
-        "text": " " 
+        "text": " "
     }
     
     if dialog_id.strip():
@@ -56,11 +60,11 @@ def add_contact(config: dict, name: str, dialog_id: str, chat_number: str) -> Op
     print("Payload (key hidden):", {k: v if k != 'key' else '****' for k, v in payload.items()})
     
     headers = {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/x-www-form-urlencoded'
     }
     
     try:
-        response = requests.post(url, json=payload, headers=headers)
+        response = requests.post(url, data=payload, headers=headers)
         print(f"Response status code: {response.status_code}")
         print(f"Response content: {response.text}")
         if response.status_code in [200, 201]:
@@ -105,7 +109,7 @@ def process_contacts(config: dict):
             else:
                 df.at[idx, df.columns[0]] = 'Erro' 
                 df.at[idx, df.columns[4]] = error_desc 
-            
+
             write_excel(df, config['excel_file'])
             
             # Wait 5 seconds before next attempt
