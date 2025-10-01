@@ -8,20 +8,21 @@ from typing import Optional
 load_dotenv()
 
 def load_config() -> dict:
-    return {
+    config = {
         'server': os.getenv('SERVER'),
         'api_key': os.getenv('KEY'),
         'account_id': os.getenv('ACCOUNT_ID'),
         'phone_id': os.getenv('PHONE_ID'),
-        'excel_file': 'clients.xlsx' 
+        'excel_file': 'clients.xlsx'
     }
+    print("Loaded config:", {k: v if k != 'api_key' else '****' for k, v in config.items()})  # Hide api_key for security
+    return config
 
 def read_excel(file_path: str) -> pd.DataFrame:
     try:
         df = pd.read_excel(file_path, header=0)
-        df.columns = ['Cadastrado', 'Nome', 'ID_do_diálogo', 'Número', 'Erro'][:len(df.columns)]
-        df['Erro'] = df['Erro'].fillna('')
-        df['ID_do_diálogo'] = df['ID_do_diálogo'].fillna('')
+        df.iloc[:, 2] = df.iloc[:, 2].fillna('')
+        df.iloc[:, 4] = df.iloc[:, 4].fillna('')
         return df
     except Exception as e:
         print(f"Error reading Excel file: {e}")
@@ -36,7 +37,8 @@ def write_excel(df: pd.DataFrame, file_path: str):
         print(f"Error writing to Excel: {e}")
 
 def add_contact(config: dict, name: str, dialog_id: str, chat_number: str) -> Optional[str]:
-    url = f"https://{config['server']}" 
+    url = f"https://{config['server']}"
+    print(f"Sending request to URL: {url}")
     
     payload = {
         "key": config['api_key'],
@@ -50,12 +52,16 @@ def add_contact(config: dict, name: str, dialog_id: str, chat_number: str) -> Op
     if dialog_id.strip():
         payload["dialog_id"] = dialog_id
     
+    print("Payload (key hidden):", {k: v if k != 'key' else '****' for k, v in payload.items()})
+    
     headers = {
         'Content-Type': 'application/json'
     }
     
     try:
         response = requests.post(url, json=payload, headers=headers)
+        print(f"Response status code: {response.status_code}")
+        print(f"Response content: {response.text}")
         if response.status_code in [200, 201]:
             print(f"Contact added successfully: {chat_number}")
             return None
@@ -72,6 +78,11 @@ def add_contact(config: dict, name: str, dialog_id: str, chat_number: str) -> Op
         return str(e)
 
 def process_contacts(config: dict):
+    if not all([config['server'], config['api_key'], config['account_id'], config['phone_id']]):
+        missing = [k for k, v in config.items() if not v and k != 'excel_file']
+        print(f"Missing required config from .env: {', '.join(missing)}")
+        return
+    
     df = read_excel(config['excel_file'])
     if df.empty:
         print("No data found in Excel file 'clients.xlsx'.")
@@ -79,20 +90,20 @@ def process_contacts(config: dict):
     
     for idx in range(len(df)):
         row = df.iloc[idx]
-        cadastrado = str(row['Cadastrado']).strip().lower()
+        cadastrado = str(row.iloc[0]).strip().lower()  # Coluna A (Cadastrado)
         
         if cadastrado == 'nao':
-            name = str(row['Nome'])
-            dialog_id = str(row['ID_do_diálogo'])
-            chat_number = str(row['Número'])
+            name = str(row.iloc[1])  # Coluna B (Nome)
+            dialog_id = str(row.iloc[2])  # Coluna C (ID do diálogo)
+            chat_number = str(row.iloc[3])  # Coluna D (Número)
             
             error_desc = add_contact(config, name, dialog_id, chat_number)
             
             if error_desc is None:
-                df.at[idx, 'Cadastrado'] = 'Sim'
+                df.at[idx, df.columns[0]] = 'Sim'
             else:
-                df.at[idx, 'Cadastrado'] = 'Erro'
-                df.at[idx, 'Erro'] = error_desc
+                df.at[idx, df.columns[0]] = 'Erro' 
+                df.at[idx, df.columns[4]] = error_desc 
             
             # Save after each update
             write_excel(df, config['excel_file'])
@@ -110,7 +121,4 @@ def process_contacts(config: dict):
 
 if __name__ == "__main__":
     config = load_config()
-    if not all([config['api_key'], config['account_id'], config['phone_id'], config['server']]):
-        print("Missing required config from .env: SERVER, KEY, ACCOUNT_ID, PHONE_ID")
-    else:
-        process_contacts(config)
+    process_contacts(config)
