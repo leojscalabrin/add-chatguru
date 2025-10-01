@@ -37,16 +37,17 @@ def write_excel(df: pd.DataFrame, file_path: str):
         print(f"Error writing to Excel: {e}")
 
 def add_contact(config: dict, name: str, dialog_id: str, chat_number: str) -> Optional[str]:
-    url = f"https://{config['server']}"
+    url = f"https://{config['server']}/api/v1"
     print(f"Sending request to URL: {url}")
     
     payload = {
+        "action": "chat_add",
         "key": config['api_key'],
         "account_id": config['account_id'],
         "phone_id": config['phone_id'],
         "name": name,
         "chat_number": chat_number,
-        "text": " "
+        "text": " " 
     }
     
     if dialog_id.strip():
@@ -105,7 +106,6 @@ def process_contacts(config: dict):
                 df.at[idx, df.columns[0]] = 'Erro' 
                 df.at[idx, df.columns[4]] = error_desc 
             
-            # Save after each update
             write_excel(df, config['excel_file'])
             
             # Wait 5 seconds before next attempt
