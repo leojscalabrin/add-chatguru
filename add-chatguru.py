@@ -12,7 +12,6 @@ def load_config() -> dict:
         'server': os.getenv('SERVER'),
         'api_key': os.getenv('KEY'),
         'account_id': os.getenv('ACCOUNT_ID'),
-        'phone_id': os.getenv('PHONE_ID'),
         'excel_file': 'clients.xlsx'
     }
     print("Loaded config:", {k: v if k != 'api_key' else '****' for k, v in config.items()})  # Hide api_key for security
@@ -21,12 +20,10 @@ def load_config() -> dict:
 def read_excel(file_path: str) -> pd.DataFrame:
     try:
         df = pd.read_excel(file_path, header=0)
-        if len(df.columns) > 2:
-            df.iloc[:, 2] = df.iloc[:, 2].astype('object')
-        if len(df.columns) > 4:
-            df.iloc[:, 4] = df.iloc[:, 4].astype('object')
-        df.iloc[:, 2] = df.iloc[:, 2].fillna('')
-        df.iloc[:, 4] = df.iloc[:, 4].fillna('')
+        columns_to_str = [0, 1, 2, 3, 4, 5, 6]
+        for col in columns_to_str:
+            if len(df.columns) > col:
+                df.iloc[:, col] = df.iloc[:, col].astype('object').fillna('')
         return df
     except Exception as e:
         print(f"Error reading Excel file: {e}")
@@ -40,7 +37,7 @@ def write_excel(df: pd.DataFrame, file_path: str):
     except Exception as e:
         print(f"Error writing to Excel: {e}")
 
-def add_contact(config: dict, name: str, dialog_id: str, chat_number: str) -> Optional[str]:
+def add_contact(config: dict, name: str, phone_id: str, dialog_id: str, user_id: str, chat_number: str) -> Optional[str]:
     url = f"https://{config['server']}/api/v1"
     print(f"Sending request to URL: {url}")
     
@@ -48,7 +45,7 @@ def add_contact(config: dict, name: str, dialog_id: str, chat_number: str) -> Op
         "action": "chat_add",
         "key": config['api_key'],
         "account_id": config['account_id'],
-        "phone_id": config['phone_id'],
+        "phone_id": phone_id,
         "name": name,
         "chat_number": chat_number,
         "text": " "
@@ -56,6 +53,9 @@ def add_contact(config: dict, name: str, dialog_id: str, chat_number: str) -> Op
     
     if dialog_id.strip():
         payload["dialog_id"] = dialog_id
+    
+    if user_id.strip():
+        payload["user_id"] = user_id
     
     print("Payload (key hidden):", {k: v if k != 'key' else '****' for k, v in payload.items()})
     
@@ -83,7 +83,7 @@ def add_contact(config: dict, name: str, dialog_id: str, chat_number: str) -> Op
         return str(e)
 
 def process_contacts(config: dict):
-    if not all([config['server'], config['api_key'], config['account_id'], config['phone_id']]):
+    if not all([config['server'], config['api_key'], config['account_id']]):
         missing = [k for k, v in config.items() if not v and k != 'excel_file']
         print(f"Missing required config from .env: {', '.join(missing)}")
         return
@@ -98,17 +98,19 @@ def process_contacts(config: dict):
         cadastrado = str(row.iloc[0]).strip().lower()  # Coluna A (Cadastrado)
         
         if cadastrado == 'nao':
-            name = str(row.iloc[1])  # Coluna B (Nome)
-            dialog_id = str(row.iloc[2])  # Coluna C (ID do diálogo)
-            chat_number = str(row.iloc[3])  # Coluna D (Número)
+            name = str(row.iloc[1]).strip()  # Coluna B (Nome)
+            phone_id = str(row.iloc[2]).strip()  # Coluna C (ID de telefone)
+            dialog_id = str(row.iloc[3]).strip()  # Coluna D (ID do diálogo)
+            user_id = str(row.iloc[4]).strip()  # Coluna E (ID de usuário)
+            chat_number = str(row.iloc[5]).strip()  # Coluna F (Número)
             
-            error_desc = add_contact(config, name, dialog_id, chat_number)
+            error_desc = add_contact(config, name, phone_id, dialog_id, user_id, chat_number)
             
             if error_desc is None:
-                df.at[idx, df.columns[0]] = 'Sim'
+                df.iloc[idx, 0] = 'Sim'
             else:
-                df.at[idx, df.columns[0]] = 'Erro' 
-                df.at[idx, df.columns[4]] = error_desc 
+                df.iloc[idx, 0] = 'Erro' 
+                df.iloc[idx, 6] = error_desc  # Coluna G (Erro)
 
             write_excel(df, config['excel_file'])
             
