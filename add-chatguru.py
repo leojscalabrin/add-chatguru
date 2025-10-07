@@ -124,11 +124,11 @@ def process_contacts(config: dict):
         if stop_processing:
             print("Parando processamento...")
             break
-            
+
         row = df.iloc[idx]
-        cadastrado = str(row.iloc[0]).strip().lower()  # Coluna A (Cadastrado)
-        
-        if cadastrado == 'Nao':
+        cadastrado = str(row.iloc[0]).strip().lower()  # Coluna A (Cadastrado) - normalizado para lowercase (case-insensitive)
+
+        if cadastrado == 'nao':
             name = str(row.iloc[1]).strip()  # Coluna B (Nome)
             if not name:
                 name = "Sem Nome"
@@ -136,17 +136,17 @@ def process_contacts(config: dict):
             dialog_id = str(row.iloc[3]).strip()  # Coluna D (ID do diálogo)
             user_id = str(row.iloc[4]).strip()  # Coluna E (ID de usuário)
             chat_number = str(row.iloc[5]).strip()  # Coluna F (Número)
-            
+
             error_desc = add_contact(config, name, phone_id, dialog_id, user_id, chat_number)
-            
+
             if error_desc is None:
                 df.iloc[idx, 0] = 'Sim'
             else:
-                df.iloc[idx, 0] = 'Erro' 
+                df.iloc[idx, 0] = 'Erro'
                 df.iloc[idx, 6] = error_desc  # Coluna G (Erro)
 
             write_excel(df, config['excel_file'])
-            
+
             # Wait 1 second before next attempt
             if idx < len(df) - 1 and not stop_processing:
                 print("Waiting 1 second before next attempt...")
