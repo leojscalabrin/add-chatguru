@@ -2,10 +2,21 @@ import os
 import time
 import requests
 import pandas as pd
+import shutil
+import signal
 from dotenv import load_dotenv
 from typing import Optional
 
 load_dotenv()
+
+stop_processing = False
+
+def signal_handler(sig, frame):
+    global stop_processing
+    print("\nInterrupção detectada (Ctrl+C). Salvando progresso e parando...")
+    stop_processing = True
+
+signal.signal(signal.SIGINT, signal_handler)
 
 def load_config() -> dict:
     config = {
@@ -30,14 +41,28 @@ def read_excel(file_path: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 def write_excel(df: pd.DataFrame, file_path: str):
+    temp_path = file_path + '.tmp'
+    backup_path = file_path + '.bak'
     try:
-        with pd.ExcelWriter(file_path, engine='openpyxl', mode='w') as writer:
+        with pd.ExcelWriter(temp_path, engine='openpyxl', mode='w') as writer:
             df.to_excel(writer, sheet_name='Sheet1', index=False)
+        shutil.move(temp_path, file_path)
+        # Atualiza o backup após sucesso
+        shutil.copy(file_path, backup_path)
         print(f"Excel file updated: {file_path}")
+    except KeyboardInterrupt:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise  # Re-raise para parar o processo
     except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
         print(f"Error writing to Excel: {e}")
 
 def add_contact(config: dict, name: str, phone_id: str, dialog_id: str, user_id: str, chat_number: str) -> Optional[str]:
+    if stop_processing:
+        return "Interrompido pelo usuário"
+    
     url = f"https://{config['server']}/api/v1"
     print(f"Sending request to URL: {url}")
     
@@ -78,6 +103,8 @@ def add_contact(config: dict, name: str, phone_id: str, dialog_id: str, user_id:
         else:
             print(f"Unexpected status code {response.status_code} for {chat_number}")
             return f"HTTP {response.status_code}"
+    except KeyboardInterrupt:
+        raise
     except Exception as e:
         print(f"Request failed for {chat_number}: {e}")
         return str(e)
@@ -88,17 +115,32 @@ def process_contacts(config: dict):
         print(f"Missing required config from .env: {', '.join(missing)}")
         return
     
+    backup_path = config['excel_file'] + '.bak'
+    # Cria backup inicial
+    if os.path.exists(config['excel_file']):
+        shutil.copy(config['excel_file'], backup_path)
+        print(f"Backup criado: {backup_path}")
+    
     df = read_excel(config['excel_file'])
     if df.empty:
         print("No data found in Excel file 'clients.xlsx'.")
         return
     
+    global stop_processing
+    stop_processing = False
+    
     for idx in range(len(df)):
+        if stop_processing:
+            print("Parando processamento...")
+            break
+            
         row = df.iloc[idx]
         cadastrado = str(row.iloc[0]).strip().lower()  # Coluna A (Cadastrado)
         
         if cadastrado == 'nao':
             name = str(row.iloc[1]).strip()  # Coluna B (Nome)
+            if not name:
+                name = "Sem Nome"
             phone_id = str(row.iloc[2]).strip()  # Coluna C (ID de telefone)
             dialog_id = str(row.iloc[3]).strip()  # Coluna D (ID do diálogo)
             user_id = str(row.iloc[4]).strip()  # Coluna E (ID de usuário)
@@ -114,17 +156,25 @@ def process_contacts(config: dict):
 
             write_excel(df, config['excel_file'])
             
-            # Wait 5 seconds before next attempt
-            if idx < len(df) - 1:
-                print("Waiting 5 seconds before next attempt...")
-                time.sleep(5)
+            # Wait 1 second1 before next attempt
+            if idx < len(df) - 1 and not stop_processing:
+                print("Waiting 1 second before next attempt...")
+                time.sleep(1)
         elif cadastrado == 'erro':
             print(f"Skipping row {idx + 1} due to previous error.")
         else:
             print(f"Skipping row {idx + 1}: already processed ({cadastrado}).")
     
-    print("Processing complete.")
+    if stop_processing:
+        print("Processamento interrompido. Use o backup se necessário.")
+    else:
+        print("Processing complete.")
 
 if __name__ == "__main__":
     config = load_config()
-    process_contacts(config)
+    try:
+        process_contacts(config)
+    except KeyboardInterrupt:
+        print("\nProcesso interrompido pelo usuário.")
+    finally:
+        print("Script finalizado.")
