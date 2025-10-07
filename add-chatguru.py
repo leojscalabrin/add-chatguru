@@ -41,14 +41,11 @@ def read_excel(file_path: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 def write_excel(df: pd.DataFrame, file_path: str):
-    temp_path = file_path + '.tmp'
-    backup_path = file_path + '.bak'
+    temp_path = file_path.replace('.xlsx', '_temp.xlsx')
     try:
         with pd.ExcelWriter(temp_path, engine='openpyxl', mode='w') as writer:
             df.to_excel(writer, sheet_name='Sheet1', index=False)
         shutil.move(temp_path, file_path)
-        # Atualiza o backup após sucesso
-        shutil.copy(file_path, backup_path)
         print(f"Excel file updated: {file_path}")
     except KeyboardInterrupt:
         if os.path.exists(temp_path):
@@ -115,12 +112,6 @@ def process_contacts(config: dict):
         print(f"Missing required config from .env: {', '.join(missing)}")
         return
     
-    backup_path = config['excel_file'] + '.bak'
-    # Cria backup inicial
-    if os.path.exists(config['excel_file']):
-        shutil.copy(config['excel_file'], backup_path)
-        print(f"Backup criado: {backup_path}")
-    
     df = read_excel(config['excel_file'])
     if df.empty:
         print("No data found in Excel file 'clients.xlsx'.")
@@ -156,7 +147,7 @@ def process_contacts(config: dict):
 
             write_excel(df, config['excel_file'])
             
-            # Wait 1 second1 before next attempt
+            # Wait 1 second before next attempt
             if idx < len(df) - 1 and not stop_processing:
                 print("Waiting 1 second before next attempt...")
                 time.sleep(1)
@@ -166,7 +157,7 @@ def process_contacts(config: dict):
             print(f"Skipping row {idx + 1}: already processed ({cadastrado}).")
     
     if stop_processing:
-        print("Processamento interrompido. Use o backup se necessário.")
+        print("Processamento interrompido.")
     else:
         print("Processing complete.")
 
