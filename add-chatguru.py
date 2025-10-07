@@ -128,7 +128,7 @@ def process_contacts(config: dict):
         row = df.iloc[idx]
         cadastrado = str(row.iloc[0]).strip().lower()  # Coluna A (Cadastrado)
         
-        if cadastrado == 'nao':
+        if cadastrado == 'Nao':
             name = str(row.iloc[1]).strip()  # Coluna B (Nome)
             if not name:
                 name = "Sem Nome"
